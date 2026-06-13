@@ -10,6 +10,9 @@ web_stage/
 .env.test.local
 .env.production.local
 *.env
+private/
+private.*
+private
 
 # Build outputs
 dist/
