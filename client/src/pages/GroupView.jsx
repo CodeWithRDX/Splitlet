@@ -3,7 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { apiFetch, getUser } from '../utils/api';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : window.location.origin);
+const SOCKET_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'http://localhost:5001')
+  ? import.meta.env.VITE_API_URL
+  : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : window.location.origin);
 
 export default function GroupView() {
   const { id } = useParams();

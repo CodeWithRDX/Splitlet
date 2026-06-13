@@ -27,14 +27,6 @@ services:
     restart: always
     ports:
       - "5001:5001"
-    environment:
-      - PORT=5001
-      - DB_HOST=db
-      - DB_USER=splitlet_user
-      - DB_PASSWORD=splitlet_password
-      - DB_NAME=splitlet
-      - JWT_SECRET=splitlet_super_secret_jwt_key_2026
-      - CLIENT_URL=http://localhost:3000
     depends_on:
       db:
         condition: service_healthy

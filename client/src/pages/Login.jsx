@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { apiFetch, setToken, setUser } from '../utils/api';
 
-const API_URL = import.meta.env.VITE_API_URL !== undefined ? import.meta.env.VITE_API_URL : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : '');
+const API_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'http://localhost:5001')
+  ? import.meta.env.VITE_API_URL
+  : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5001' : '');
 
 export default function Login({ onAuthSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
