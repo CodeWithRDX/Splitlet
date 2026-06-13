@@ -68,10 +68,10 @@ jobs:
           port: 22
           script: |
             # Ensure target directory exists, clone if not present
-            if [ ! -d "/home/${{ secrets.EC2_USERNAME }}/splitlet" ]; then
-              git clone https://github.com/CodeWithRDX/Splitlet.git /home/${{ secrets.EC2_USERNAME }}/splitlet
+            if [ ! -d "/home/${{ secrets.EC2_USERNAME }}/Splitlet" ]; then
+              git clone https://github.com/CodeWithRDX/Splitlet.git /home/${{ secrets.EC2_USERNAME }}/Splitlet
             fi
-            cd /home/${{ secrets.EC2_USERNAME }}/splitlet
+            cd /home/${{ secrets.EC2_USERNAME }}/Splitlet
             
             # Pull latest changes and rebuild containers
             git pull origin main
