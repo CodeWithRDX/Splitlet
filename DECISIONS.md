@@ -42,3 +42,9 @@ This document details the core architectural and business logic decisions made d
   - Satisfies **Meera's** persona requirement.
   - No database inserts are committed to the core ledger tables (`expenses`, `splits`) until the user reviews, resolves missing values, and explicitly clicks **Approve** or **Approve All**.
   - Provides audit transparency by creating a permanent log of all imported CSV filenames, row metrics, and resolutions.
+
+## 7. MySQL 8.0 Reserved Keyword Escape (`row_number`)
+- **Decision**: Enclose all SQL query references to the `row_number` column in backticks (`` `row_number` ``).
+- **Rationale**:
+  - In MySQL 8.0, `ROW_NUMBER` was introduced as a reserved keyword for window functions.
+  - Using it unescaped inside table creation DDL or query statements causes database initialization to fail. Escaping it ensures complete compatibility with MySQL 8.x while retaining the intuitive column name.
