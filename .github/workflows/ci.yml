@@ -52,3 +52,29 @@ jobs:
         run: |
           cd client
           npm run build
+
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            # Ensure target directory exists, clone if not present
+            if [ ! -d "/home/${{ secrets.EC2_USERNAME }}/splitlet" ]; then
+              git clone https://github.com/CodeWithRDX/Splitlet.git /home/${{ secrets.EC2_USERNAME }}/splitlet
+            fi
+            cd /home/${{ secrets.EC2_USERNAME }}/splitlet
+            
+            # Pull latest changes and rebuild containers
+            git pull origin main
+            docker compose down
+            docker compose up --build -d
+
