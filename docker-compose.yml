@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: splitlet_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: splitlet
+      MYSQL_USER: splitlet_user
+      MYSQL_PASSWORD: splitlet_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: ./server
+    container_name: splitlet_server
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - DB_HOST=db
+      - DB_USER=splitlet_user
+      - DB_PASSWORD=splitlet_password
+      - DB_NAME=splitlet
+      - JWT_SECRET=splitlet_super_secret_jwt_key_2026
+      - CLIENT_URL=http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    build: ./client
+    container_name: splitlet_client
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:5001
+    depends_on:
+      - server
+
+volumes:
+  mysql_data:

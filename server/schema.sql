@@ -1,0 +1,114 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) DEFAULT NULL,
+  status VARCHAR(50) DEFAULT 'active',
+  oauth_provider VARCHAR(50) DEFAULT NULL,
+  oauth_id VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `groups` (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS group_members (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  group_id INT NOT NULL,
+  user_id INT NOT NULL,
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  left_at TIMESTAMP NULL DEFAULT NULL,
+  FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  group_id INT NOT NULL,
+  payer_id INT NOT NULL,
+  amount_cents_original INT NOT NULL,
+  currency_code VARCHAR(10) NOT NULL,
+  amount_cents_inr INT NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  split_type VARCHAR(50) NOT NULL,
+  is_deleted BOOLEAN DEFAULT FALSE,
+  date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE CASCADE,
+  FOREIGN KEY (payer_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS splits (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  expense_id INT NOT NULL,
+  user_id INT NOT NULL,
+  amount_owed_cents_original INT NOT NULL,
+  amount_owed_cents_inr INT NOT NULL,
+  percentage DECIMAL(5,2) DEFAULT NULL,
+  shares DECIMAL(5,2) DEFAULT NULL,
+  FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  group_id INT NOT NULL,
+  payer_id INT NOT NULL,
+  receiver_id INT NOT NULL,
+  amount_cents_original INT NOT NULL,
+  currency_code VARCHAR(10) NOT NULL,
+  amount_cents_inr INT NOT NULL,
+  date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE CASCADE,
+  FOREIGN KEY (payer_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  expense_id INT NOT NULL,
+  user_id INT NOT NULL,
+  content TEXT NOT NULL,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT DEFAULT NULL,
+  type VARCHAR(50) NOT NULL,
+  recipient_email VARCHAR(255) NOT NULL,
+  status VARCHAR(20) DEFAULT 'pending',
+  error_message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS import_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  file_name VARCHAR(255) NOT NULL,
+  total_rows INT DEFAULT 0,
+  valid_rows INT DEFAULT 0,
+  anomalies_count INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS import_anomalies (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  import_log_id INT NOT NULL,
+  `row_number` INT NOT NULL,
+  field_name VARCHAR(50) NOT NULL,
+  raw_value VARCHAR(255),
+  anomaly_type VARCHAR(100) NOT NULL,
+  proposed_fix VARCHAR(255),
+  status VARCHAR(50) DEFAULT 'pending',
+  resolved_value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (import_log_id) REFERENCES import_logs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
