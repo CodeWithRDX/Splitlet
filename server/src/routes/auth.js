@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { sendAndLogEmail } = require('../utils/notifications');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'splitlet_super_secret_jwt_key_2026';
 
@@ -194,6 +196,113 @@ router.post('/invites/claim', async (req, res) => {
   }
 });
 
+// --- PASSWORD RESET ENDPOINTS ---
+
+const CLIENT_URL_FOR_RESET = process.env.CLIENT_URL || 'http://localhost:3000';
+
+// Request a password reset link
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  try {
+    // Check if user exists
+    const [users] = await db.query('SELECT id, name, email, status, oauth_provider, password_hash FROM users WHERE email = ?', [email]);
+
+    if (users.length === 0) {
+      // Don't reveal whether the email exists
+      return res.json({ message: 'If that email is registered, you will receive a password reset link shortly.' });
+    }
+
+    const user = users[0];
+
+    // Allow OAuth users to set a password via reset flow too.
+    // No guard needed — the flow works for both local and OAuth accounts.
+
+    // Generate a secure random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+
+    // Hash the token before storing (so DB compromise doesn't leak valid tokens)
+    const hashedToken = await bcrypt.hash(resetToken, 10);
+
+    // Set expiry to 15 minutes from now
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Save hashed token and expiry to user record
+    await db.query(
+      'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+      [hashedToken, expires, user.id]
+    );
+
+    // Construct reset link
+    const resetLink = `${CLIENT_URL_FOR_RESET}/reset-password/${resetToken}`;
+
+    // Send email
+    const subject = 'Splitlet – Password Reset Request';
+    const text = `Hi ${user.name || 'there'},\n\nWe received a request to reset your Splitlet password.\n\nClick the link below to set a new password (valid for 15 minutes):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.\n\nCheers,\nThe Splitlet Team`;
+
+    await sendAndLogEmail(user.id, 'password_reset', user.email, subject, text);
+
+    res.json({ message: 'If that email is registered, you will receive a password reset link shortly.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset password with token
+router.post('/reset-password/:token', async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+
+  try {
+    // Find users that have an unexpired reset token
+    const [users] = await db.query(
+      'SELECT id, reset_token, reset_token_expires FROM users WHERE reset_token IS NOT NULL AND reset_token_expires > NOW()'
+    );
+
+    if (users.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+    }
+
+    // Find the matching user by comparing the provided token against hashed tokens
+    let matchedUser = null;
+    for (const u of users) {
+      const isMatch = await bcrypt.compare(token, u.reset_token);
+      if (isMatch) {
+        matchedUser = u;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Update password and clear reset token
+    await db.query(
+      'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+      [passwordHash, matchedUser.id]
+    );
+
+    res.json({ message: 'Password has been reset successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // --- GOOGLE OAUTH 2.0 ENDPOINTS ---
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -309,7 +418,7 @@ router.get('/oauth/google/callback', async (req, res) => {
 });
 
 // Get current user profile
-router.get('/me', authMiddleware, async (req, res) => {
+router.get('/profile', authMiddleware, async (req, res) => {
   try {
     const [users] = await db.query('SELECT id, name, email, status, oauth_provider, created_at FROM users WHERE id = ?', [req.user.id]);
     if (users.length === 0) {

@@ -9,6 +9,8 @@ import GroupView from './pages/GroupView';
 import ClaimAccount from './pages/ClaimAccount';
 import OAuthSuccess from './pages/OAuthSuccess';
 import ImportWizard from './pages/ImportWizard';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -77,6 +79,14 @@ export default function App() {
         <Route 
           path="/claim" 
           element={!currentUser ? <ClaimAccount onAuthSuccess={handleAuthSuccess} /> : <Navigate to="/dashboard" />} 
+        />
+        <Route 
+          path="/forgot-password" 
+          element={!currentUser ? <ForgotPassword /> : <Navigate to="/dashboard" />} 
+        />
+        <Route 
+          path="/reset-password/:token" 
+          element={!currentUser ? <ResetPassword /> : <Navigate to="/dashboard" />} 
         />
         
         {/* Private Protected Routes */}

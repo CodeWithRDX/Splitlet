@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   status VARCHAR(50) DEFAULT 'active',
   oauth_provider VARCHAR(50) DEFAULT NULL,
   oauth_id VARCHAR(255) DEFAULT NULL,
+  reset_token VARCHAR(255) DEFAULT NULL,
+  reset_token_expires DATETIME DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

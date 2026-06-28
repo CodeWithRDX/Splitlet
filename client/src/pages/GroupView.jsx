@@ -356,14 +356,14 @@ export default function GroupView() {
       </header>
 
       {/* Group Title Panel */}
-      <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="glass-panel group-title-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h2 style={{ fontSize: '24px', fontWeight: 700 }}>{group?.name}</h2>
           <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             Group Ledger · Created {new Date(group?.createdAt).toLocaleDateString()}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="group-title-actions" style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary" onClick={() => navigate(`/group/${groupId}/import`)}>
             Import CSV
           </button>

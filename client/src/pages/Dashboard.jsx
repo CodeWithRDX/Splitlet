@@ -140,7 +140,7 @@ export default function Dashboard({ user, onLogout }) {
           <div className="logo-icon">S</div>
           <span>Splitlet</span>
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <span>Hello, <strong>{user.name}</strong></span>
           <button className="btn btn-secondary" onClick={() => { logout(); onLogout(); }}>
             Log Out
