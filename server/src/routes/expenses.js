@@ -4,6 +4,7 @@ const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { calculateSplits } = require('../utils/splits');
 const { sendAndLogEmail } = require('../utils/notifications');
+const { getExchangeRates } = require('../utils/rates');
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 
@@ -42,9 +43,9 @@ router.post('/', async (req, res) => {
     }
 
     const currency = req.body.currencyCode || 'INR';
-    const exchangeRate = req.body.exchangeRate || 1.0;
+    const rates = await getExchangeRates();
     const amountOriginal = amountCents;
-    const amountInr = currency === 'USD' ? Math.round(amountCents * exchangeRate) : amountCents;
+    const amountInr = currency !== 'INR' ? Math.round(amountCents * (1 / (rates[currency] || 1.0))) : amountCents;
     const expenseDate = req.body.date || new Date().toISOString().slice(0, 10);
 
     // Insert expense record
@@ -69,7 +70,7 @@ router.post('/', async (req, res) => {
       }
 
       const owedOriginal = split.amountOwedCentsOriginal !== undefined ? split.amountOwedCentsOriginal : split.amountOwedCents;
-      const owedInr = split.amountOwedCentsInr !== undefined ? split.amountOwedCentsInr : (currency === 'USD' ? Math.round(split.amountOwedCents * exchangeRate) : split.amountOwedCents);
+      const owedInr = split.amountOwedCentsInr !== undefined ? split.amountOwedCentsInr : (currency !== 'INR' ? Math.round(split.amountOwedCents * (1 / (rates[currency] || 1.0))) : split.amountOwedCents);
 
       await connection.query(
         `INSERT INTO splits (expense_id, user_id, amount_owed_cents_original, amount_owed_cents_inr, percentage, shares) 
@@ -167,9 +168,9 @@ router.put('/:id', async (req, res) => {
     }
 
     const currency = req.body.currencyCode || 'INR';
-    const exchangeRate = req.body.exchangeRate || 1.0;
+    const rates = await getExchangeRates();
     const amountOriginal = amountCents;
-    const amountInr = currency === 'USD' ? Math.round(amountCents * exchangeRate) : amountCents;
+    const amountInr = currency !== 'INR' ? Math.round(amountCents * (1 / (rates[currency] || 1.0))) : amountCents;
     const expenseDate = req.body.date || new Date().toISOString().slice(0, 10);
 
     // Update expense record
@@ -194,7 +195,7 @@ router.put('/:id', async (req, res) => {
       }
 
       const owedOriginal = split.amountOwedCentsOriginal !== undefined ? split.amountOwedCentsOriginal : split.amountOwedCents;
-      const owedInr = split.amountOwedCentsInr !== undefined ? split.amountOwedCentsInr : (currency === 'USD' ? Math.round(split.amountOwedCents * exchangeRate) : split.amountOwedCents);
+      const owedInr = split.amountOwedCentsInr !== undefined ? split.amountOwedCentsInr : (currency !== 'INR' ? Math.round(split.amountOwedCents * (1 / (rates[currency] || 1.0))) : split.amountOwedCents);
 
       await connection.query(
         `INSERT INTO splits (expense_id, user_id, amount_owed_cents_original, amount_owed_cents_inr, percentage, shares) 

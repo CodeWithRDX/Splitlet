@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, logout } from '../utils/api';
+import { useCurrency } from '../utils/currency';
+import SettingsModal from '../components/SettingsModal';
 
 export default function Dashboard({ user, onLogout }) {
+  const { prefUser, formatInrCents } = useCurrency();
+  const activeUser = prefUser || user;
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [groups, setGroups] = useState([]);
   const [globalBalances, setGlobalBalances] = useState({
     netBalanceCents: 0,
@@ -120,7 +125,7 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const formatCents = (cents) => {
-    return `$${(Math.abs(cents) / 100).toFixed(2)}`;
+    return formatInrCents(cents);
   };
 
   const getGroupBalanceCents = (groupId) => {
@@ -141,7 +146,10 @@ export default function Dashboard({ user, onLogout }) {
           <span>Splitlet</span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <span>Hello, <strong>{user.name}</strong></span>
+          <span>Hello, <strong>{activeUser.name}</strong></span>
+          <button className="btn btn-secondary" onClick={() => setShowSettingsModal(true)}>
+            Settings
+          </button>
           <button className="btn btn-secondary" onClick={() => { logout(); onLogout(); }}>
             Log Out
           </button>
@@ -328,6 +336,11 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={showSettingsModal} 
+        onClose={() => setShowSettingsModal(false)} 
+      />
     </div>
   );
 }

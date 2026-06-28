@@ -11,6 +11,7 @@ import OAuthSuccess from './pages/OAuthSuccess';
 import ImportWizard from './pages/ImportWizard';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import { CurrencyProvider } from './utils/currency';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -55,60 +56,62 @@ export default function App() {
   }
 
   return (
-    <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route 
-          path="/" 
-          element={<Landing />} 
-        />
-        <Route 
-          path="/about" 
-          element={<About />} 
-        />
-        <Route 
-          path="/oauth-success" 
-          element={<OAuthSuccess onAuthSuccess={handleAuthSuccess} />} 
-        />
-        
-        {/* Guest Only Routes (Redirects to dashboard if logged in) */}
-        <Route 
-          path="/login" 
-          element={!currentUser ? <Login onAuthSuccess={handleAuthSuccess} /> : <Navigate to="/dashboard" />} 
-        />
-        <Route 
-          path="/claim" 
-          element={!currentUser ? <ClaimAccount onAuthSuccess={handleAuthSuccess} /> : <Navigate to="/dashboard" />} 
-        />
-        <Route 
-          path="/forgot-password" 
-          element={!currentUser ? <ForgotPassword /> : <Navigate to="/dashboard" />} 
-        />
-        <Route 
-          path="/reset-password/:token" 
-          element={!currentUser ? <ResetPassword /> : <Navigate to="/dashboard" />} 
-        />
-        
-        {/* Private Protected Routes */}
-        <Route 
-          path="/dashboard" 
-          element={currentUser ? <Dashboard user={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />} 
-        />
-        <Route 
-          path="/group/:id" 
-          element={currentUser ? <GroupView /> : <Navigate to="/login" />} 
-        />
-        <Route 
-          path="/group/:id/import" 
-          element={currentUser ? <ImportWizard /> : <Navigate to="/login" />} 
-        />
-        
-        {/* Wildcard Fallback */}
-        <Route 
-          path="*" 
-          element={<Navigate to="/" />} 
-        />
-      </Routes>
-    </Router>
+    <CurrencyProvider user={currentUser}>
+      <Router>
+        <Routes>
+          {/* Public Routes */}
+          <Route 
+            path="/" 
+            element={<Landing />} 
+          />
+          <Route 
+            path="/about" 
+            element={<About />} 
+          />
+          <Route 
+            path="/oauth-success" 
+            element={<OAuthSuccess onAuthSuccess={handleAuthSuccess} />} 
+          />
+          
+          {/* Guest Only Routes (Redirects to dashboard if logged in) */}
+          <Route 
+            path="/login" 
+            element={!currentUser ? <Login onAuthSuccess={handleAuthSuccess} /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/claim" 
+            element={!currentUser ? <ClaimAccount onAuthSuccess={handleAuthSuccess} /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/forgot-password" 
+            element={!currentUser ? <ForgotPassword /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/reset-password/:token" 
+            element={!currentUser ? <ResetPassword /> : <Navigate to="/dashboard" />} 
+          />
+          
+          {/* Private Protected Routes */}
+          <Route 
+            path="/dashboard" 
+            element={currentUser ? <Dashboard user={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/group/:id" 
+            element={currentUser ? <GroupView /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/group/:id/import" 
+            element={currentUser ? <ImportWizard /> : <Navigate to="/login" />} 
+          />
+          
+          {/* Wildcard Fallback */}
+          <Route 
+            path="*" 
+            element={<Navigate to="/" />} 
+          />
+        </Routes>
+      </Router>
+    </CurrencyProvider>
   );
 }

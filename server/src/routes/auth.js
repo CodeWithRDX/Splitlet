@@ -420,13 +420,49 @@ router.get('/oauth/google/callback', async (req, res) => {
 // Get current user profile
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const [users] = await db.query('SELECT id, name, email, status, oauth_provider, created_at FROM users WHERE id = ?', [req.user.id]);
+    const [users] = await db.query(
+      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, created_at 
+       FROM users 
+       WHERE id = ?`, 
+      [req.user.id]
+    );
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
     res.json({ user: users[0] });
   } catch (error) {
     console.error('Auth check error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user settings/preferences
+router.put('/settings', authMiddleware, async (req, res) => {
+  const { country, currency, currencySymbol, locale } = req.body;
+
+  if (!currency || !locale) {
+    return res.status(400).json({ error: 'Currency and locale are required.' });
+  }
+
+  try {
+    await db.query(
+      `UPDATE users 
+       SET country = ?, currency = ?, currency_symbol = ?, locale = ? 
+       WHERE id = ?`,
+      [country || null, currency, currencySymbol || '₹', locale, req.user.id]
+    );
+
+    // Fetch updated user info
+    const [users] = await db.query(
+      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, created_at 
+       FROM users 
+       WHERE id = ?`,
+      [req.user.id]
+    );
+
+    res.json({ message: 'Settings updated successfully.', user: users[0] });
+  } catch (error) {
+    console.error('Error updating settings:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

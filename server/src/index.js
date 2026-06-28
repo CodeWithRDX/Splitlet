@@ -42,6 +42,7 @@ app.get('/health', (req, res) => {
 const io = new Server(server, {
   cors: corsOptions
 });
+app.set('socketio', io);
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -56,6 +57,45 @@ io.on('connection', (socket) => {
   socket.on('leave_expense', (expenseId) => {
     socket.leave(`expense_${expenseId}`);
     console.log(`Socket ${socket.id} left room expense_${expenseId}`);
+  });
+
+  // Join a room for a specific group
+  socket.on('join_group', (groupId) => {
+    socket.join(`group_${groupId}`);
+    console.log(`Socket ${socket.id} joined room group_${groupId}`);
+  });
+
+  // Leave a room for a specific group
+  socket.on('leave_group', (groupId) => {
+    socket.leave(`group_${groupId}`);
+    console.log(`Socket ${socket.id} left room group_${groupId}`);
+  });
+
+  // Handle typing status in group chat
+  socket.on('typing', (data) => {
+    const { groupId, userId, userName } = data;
+    socket.to(`group_${groupId}`).emit('typing', { userId, userName });
+  });
+
+  // Handle stop typing status in group chat
+  socket.on('stop_typing', (data) => {
+    const { groupId, userId } = data;
+    socket.to(`group_${groupId}`).emit('stop_typing', { userId });
+  });
+
+  // Handle sendMessage via socket directly (optional redundancy for API)
+  socket.on('sendMessage', async (data) => {
+    const { groupId, senderId, message, senderName } = data;
+    if (!groupId || !senderId || !message) return;
+    io.to(`group_${groupId}`).emit('receiveMessage', {
+      id: Math.floor(Math.random() * 1000000), // temp id if not using REST API
+      groupId,
+      senderId,
+      message,
+      createdAt: new Date(),
+      editedAt: null,
+      senderName
+    });
   });
 
   // Handle sending message inside an expense chat room

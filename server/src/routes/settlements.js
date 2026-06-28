@@ -46,10 +46,11 @@ router.post('/', async (req, res) => {
       throw new Error('Receiver is not a member of the group.');
     }
 
+    const { getExchangeRates } = require('../utils/rates');
     const currency = req.body.currencyCode || 'INR';
-    const exchangeRate = req.body.exchangeRate || 1.0;
+    const rates = await getExchangeRates();
     const amountOriginal = amountCents;
-    const amountInr = currency === 'USD' ? Math.round(amountCents * exchangeRate) : amountCents;
+    const amountInr = currency !== 'INR' ? Math.round(amountCents * (1 / (rates[currency] || 1.0))) : amountCents;
     const settlementDate = req.body.date || new Date().toISOString().slice(0, 10);
 
     // Insert settlement record

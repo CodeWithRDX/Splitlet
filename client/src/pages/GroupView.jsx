@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { apiFetch, getUser } from '../utils/api';
 import { io } from 'socket.io-client';
+import { useCurrency } from '../utils/currency';
+import SettingsModal from '../components/SettingsModal';
 
 const SOCKET_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'http://localhost:5001')
   ? import.meta.env.VITE_API_URL
@@ -42,36 +44,112 @@ export default function GroupView() {
   // Add Member Form
   const [newMemberEmail, setNewMemberEmail] = useState('');
 
+  // Currency & Settings State
+  const { prefUser, formatInrCents, formatCurrency } = useCurrency();
+  const activeUser = prefUser || currentUser;
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
   // Chat State
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  
+  // Group-wide Chat State
+  const [groupMessages, setGroupMessages] = useState([]);
+  const [groupMessageText, setGroupMessageText] = useState('');
+  const [typingUsers, setTypingUsers] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const groupMessagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetchGroupDetails();
   }, [groupId]);
 
-  // Setup/Cleanup Socket.io connection for chat
+  // Fetch initial group messages
   useEffect(() => {
-    if (activeExpense) {
-      socketRef.current = io(SOCKET_URL);
-      
-      socketRef.current.emit('join_expense', activeExpense.id);
+    setChatLoading(true);
+    apiFetch(`/api/groups/${groupId}/messages`)
+      .then(data => {
+        setGroupMessages(data || []);
+      })
+      .catch(err => console.error('Failed to load group chat messages:', err))
+      .finally(() => setChatLoading(false));
+  }, [groupId]);
 
+  // Persistent Socket Connection for Group
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL);
+    socketRef.current.emit('join_group', groupId);
+
+    socketRef.current.on('receiveMessage', (msg) => {
+      if (msg.groupId === groupId) {
+        setGroupMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      }
+    });
+
+    socketRef.current.on('typing', (data) => {
+      setTypingUsers(prev => {
+        if (prev.some(u => u.userId === data.userId)) return prev;
+        return [...prev, data];
+      });
+    });
+
+    socketRef.current.on('stop_typing', (data) => {
+      setTypingUsers(prev => prev.filter(u => u.userId !== data.userId));
+    });
+
+    socketRef.current.on('editMessage', (msg) => {
+      if (msg.groupId === groupId) {
+        setGroupMessages(prev => prev.map(m => m.id === msg.id ? { ...m, ...msg } : m));
+      }
+    });
+
+    socketRef.current.on('deleteMessage', (data) => {
+      if (data.groupId === groupId) {
+        setGroupMessages(prev => prev.filter(m => m.id !== data.id));
+      }
+    });
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.emit('leave_group', groupId);
+        socketRef.current.disconnect();
+      }
+    };
+  }, [groupId]);
+
+  // Setup/Cleanup Socket.io connection for expense chat
+  useEffect(() => {
+    if (activeExpense && socketRef.current) {
+      socketRef.current.emit('join_expense', activeExpense.id);
+      
       // Fetch latest messages from API to ensure sync
       apiFetch(`/api/expenses/${activeExpense.id}`).then(data => {
         setMessages(data.comments || []);
       }).catch(err => console.error(err));
 
-      socketRef.current.on('new_message', (msg) => {
-        setMessages(prev => [...prev, msg]);
-      });
+      const handleNewExpenseMessage = (msg) => {
+        if (msg.expenseId === activeExpense.id) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      };
+
+      socketRef.current.on('new_message', handleNewExpenseMessage);
 
       return () => {
         if (socketRef.current) {
+          socketRef.current.off('new_message', handleNewExpenseMessage);
           socketRef.current.emit('leave_expense', activeExpense.id);
-          socketRef.current.disconnect();
         }
       };
     }
@@ -81,6 +159,55 @@ export default function GroupView() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Scroll to bottom on new group message
+  useEffect(() => {
+    groupMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [groupMessages]);
+
+  const handleMessageTextChange = (e) => {
+    setGroupMessageText(e.target.value);
+
+    if (socketRef.current) {
+      if (!isTyping) {
+        setIsTyping(true);
+        socketRef.current.emit('typing', { groupId, userId: currentUser.id, userName: currentUser.name });
+      }
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        socketRef.current.emit('stop_typing', { groupId, userId: currentUser.id });
+      }, 2000);
+    }
+  };
+
+  const handleSendGroupMessage = async (e) => {
+    e.preventDefault();
+    if (!groupMessageText.trim()) return;
+
+    const messageToSend = groupMessageText.trim();
+    setGroupMessageText('');
+
+    if (socketRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      setIsTyping(false);
+      socketRef.current.emit('stop_typing', { groupId, userId: currentUser.id });
+    }
+
+    try {
+      await apiFetch(`/api/groups/${groupId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ message: messageToSend })
+      });
+    } catch (err) {
+      console.error('Failed to send group message:', err);
+      setError('Failed to send message.');
+    }
+  };
 
   const fetchGroupDetails = async () => {
     try {
@@ -206,7 +333,8 @@ export default function GroupView() {
       amountCents: amtCents,
       splitType,
       payerId: parseInt(expensePayer, 10),
-      splits: splitsPayload
+      splits: splitsPayload,
+      currencyCode: activeUser?.currency || 'INR'
     };
 
     try {
@@ -264,7 +392,8 @@ export default function GroupView() {
           groupId,
           payerId: parseInt(settlePayer, 10),
           receiverId: parseInt(settleReceiver, 10),
-          amountCents: amtCents
+          amountCents: amtCents,
+          currencyCode: activeUser?.currency || 'INR'
         })
       });
 
@@ -326,13 +455,17 @@ export default function GroupView() {
   };
 
   const formatCents = (cents, currency = 'INR') => {
-    const symbol = currency === 'USD' ? '$' : '₹';
-    return `${symbol}${(Math.abs(cents) / 100).toFixed(2)}`;
+    if (currency === 'INR') {
+      return formatInrCents(cents);
+    }
+    return formatCurrency(cents / 100, currency, activeUser?.locale || 'en-US');
   };
 
   const formatSplitCents = (splits, userId, currency = 'INR') => {
     const userSplit = splits.find(s => s.userId === userId);
-    if (!userSplit) return '₹0.00';
+    if (!userSplit) {
+      return formatCurrency(0, activeUser?.currency || 'INR', activeUser?.locale || 'en-IN');
+    }
     const hasOriginal = userSplit.amountOwedCentsOriginal !== undefined && userSplit.amountOwedCentsOriginal !== userSplit.amountOwedCents;
     const origStr = hasOriginal ? ` (${formatCents(userSplit.amountOwedCentsOriginal, currency)})` : '';
     return `${formatCents(userSplit.amountOwedCents, 'INR')}${origStr}`;
@@ -350,9 +483,14 @@ export default function GroupView() {
           <div className="logo-icon">S</div>
           <span>Splitlet</span>
         </Link>
-        <Link to="/" className="btn btn-secondary">
-          ← Back to Dashboard
-        </Link>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button className="btn btn-secondary" onClick={() => setShowSettingsModal(true)}>
+            Settings
+          </button>
+          <Link to="/" className="btn btn-secondary">
+            ← Back to Dashboard
+          </Link>
+        </div>
       </header>
 
       {/* Group Title Panel */}
@@ -390,7 +528,7 @@ export default function GroupView() {
               <p style={{ fontSize: '14px', marginTop: '4px' }}>Click "Add Expense" or "Settle Up" to begin.</p>
             </div>
           ) : (
-            <div className="expense-feed">
+            <div className="expense-feed scrollable-feed">
               {/* Merge and sort expenses & settlements by date */}
               {[
                 ...group.expenses.map(e => ({ ...e, feedType: 'expense' })),
@@ -475,6 +613,57 @@ export default function GroupView() {
 
         {/* Right Side: Members, Balances, and Active Chat */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Group Chat Section */}
+          <div className="glass-panel group-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '360px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px' }}>Group Chat</h3>
+            
+            <div 
+              className="scrollable-feed" 
+              style={{ flexGrow: 1, overflowY: 'auto', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}
+            >
+              {chatLoading ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', margin: 'auto' }}>Loading chat...</p>
+              ) : groupMessages.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', margin: 'auto' }}>
+                  No messages yet. Send a note to the group!
+                </p>
+              ) : (
+                groupMessages.map((msg) => (
+                  <div key={msg.id} className={`chat-bubble ${msg.senderId === currentUser.id ? 'mine' : ''}`} style={{ maxWidth: '85%' }}>
+                    <div className="bubble-meta" style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      <span className="bubble-user" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {msg.senderName}
+                      </span>
+                      <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="bubble-text" style={{ fontSize: '13px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.message}</div>
+                  </div>
+                ))
+              )}
+              {typingUsers.length > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', paddingLeft: '4px' }}>
+                  {typingUsers.map(u => u.userName).join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+                </div>
+              )}
+              <div ref={groupMessagesEndRef} />
+            </div>
+
+            <form onSubmit={handleSendGroupMessage} style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Type a message..."
+                value={groupMessageText}
+                onChange={handleMessageTextChange}
+                style={{ flexGrow: 1, padding: '8px 12px', fontSize: '13px' }}
+              />
+              <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                Send
+              </button>
+            </form>
+          </div>
+
           {/* Members list */}
           <div className="glass-panel">
             <div className="list-header" style={{ marginBottom: '14px' }}>
@@ -624,7 +813,7 @@ export default function GroupView() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Amount ($ USD)</label>
+                  <label className="form-label">Amount ({activeUser?.currencySymbol || '₹'} {activeUser?.currency || 'INR'})</label>
                   <input
                     type="number"
                     step="0.01"
@@ -692,7 +881,7 @@ export default function GroupView() {
 
                       {splitType !== 'equal' && val.selected && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {splitType === 'unequal' && <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>$</span>}
+                          {splitType === 'unequal' && <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{activeUser?.currencySymbol || '₹'}</span>}
                           <input
                             type="number"
                             step={splitType === 'unequal' ? '0.01' : '0.1'}
@@ -764,7 +953,7 @@ export default function GroupView() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Amount ($ USD)</label>
+                <label className="form-label">Amount ({activeUser?.currencySymbol || '₹'} {activeUser?.currency || 'INR'})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -825,6 +1014,11 @@ export default function GroupView() {
           </div>
         </div>
       )}
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={showSettingsModal} 
+        onClose={() => setShowSettingsModal(false)} 
+      />
     </div>
   );
 }

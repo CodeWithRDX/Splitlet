@@ -369,4 +369,208 @@ router.delete('/:id/members/:userId', async (req, res) => {
   }
 });
 
+// --- GROUP CHAT ENDPOINTS ---
+
+// 8. Get all group messages
+router.get('/:id/messages', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  
+  try {
+    // Check membership
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    const [messages] = await db.query(
+      `SELECT gm.id, gm.group_id as groupId, gm.sender_id as senderId, gm.message, 
+              gm.created_at as createdAt, gm.edited_at as editedAt, u.name as senderName
+       FROM group_messages gm
+       JOIN users u ON gm.sender_id = u.id
+       WHERE gm.group_id = ?
+       ORDER BY gm.created_at ASC`,
+      [groupId]
+    );
+
+    res.json(messages);
+  } catch (error) {
+    console.error('Error fetching group messages:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 9. Send a new group message
+router.post('/:id/messages', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { message } = req.body;
+
+  if (!message || message.trim() === '') {
+    return res.status(400).json({ error: 'Message content is required' });
+  }
+
+  try {
+    // Check membership
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    // Sanitize message to prevent XSS (basic HTML character escaping)
+    const sanitizedMessage = message
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
+    const [result] = await db.query(
+      'INSERT INTO group_messages (group_id, sender_id, message) VALUES (?, ?, ?)',
+      [groupId, req.user.id, sanitizedMessage]
+    );
+
+    const newMessage = {
+      id: result.insertId,
+      groupId,
+      senderId: req.user.id,
+      message: sanitizedMessage,
+      createdAt: new Date(),
+      editedAt: null,
+      senderName: req.user.name
+    };
+
+    // Broadcast message via socket.io
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`group_${groupId}`).emit('receiveMessage', newMessage);
+    }
+
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.error('Error creating group message:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 10. Edit own message (Optional)
+router.put('/:id/messages/:messageId', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const messageId = parseInt(req.params.messageId, 10);
+  const { message } = req.body;
+
+  if (!message || message.trim() === '') {
+    return res.status(400).json({ error: 'Message content is required' });
+  }
+
+  try {
+    // Check membership
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    // Verify ownership
+    const [existing] = await db.query(
+      'SELECT sender_id FROM group_messages WHERE id = ? AND group_id = ?',
+      [messageId, groupId]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (existing[0].sender_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized to edit this message' });
+    }
+
+    const sanitizedMessage = message
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
+    await db.query(
+      'UPDATE group_messages SET message = ? WHERE id = ?',
+      [sanitizedMessage, messageId]
+    );
+
+    const updatedMessage = {
+      id: messageId,
+      groupId,
+      senderId: req.user.id,
+      message: sanitizedMessage,
+      editedAt: new Date(),
+      senderName: req.user.name
+    };
+
+    // Broadcast edit event
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`group_${groupId}`).emit('editMessage', updatedMessage);
+    }
+
+    res.json(updatedMessage);
+  } catch (error) {
+    console.error('Error editing group message:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 11. Delete own message (Optional)
+router.delete('/:id/messages/:messageId', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const messageId = parseInt(req.params.messageId, 10);
+
+  try {
+    // Check membership
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    // Verify ownership
+    const [existing] = await db.query(
+      'SELECT sender_id FROM group_messages WHERE id = ? AND group_id = ?',
+      [messageId, groupId]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    if (existing[0].sender_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized to delete this message' });
+    }
+
+    await db.query(
+      'DELETE FROM group_messages WHERE id = ?',
+      [messageId]
+    );
+
+    // Broadcast delete event
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`group_${groupId}`).emit('deleteMessage', { id: messageId, groupId });
+    }
+
+    res.json({ success: true, messageId });
+  } catch (error) {
+    console.error('Error deleting group message:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
+

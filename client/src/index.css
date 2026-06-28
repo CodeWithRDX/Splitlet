@@ -855,3 +855,29 @@ body {
   }
 }
 
+/* Custom scrollable feed styles */
+.scrollable-feed {
+  max-height: 480px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.scrollable-feed::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-feed::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.scrollable-feed::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.scrollable-feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.3); /* green highlight on hover */
+}
+
+
