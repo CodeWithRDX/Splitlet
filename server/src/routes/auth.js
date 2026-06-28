@@ -418,7 +418,7 @@ router.get('/oauth/google/callback', async (req, res) => {
 });
 
 // Get current user profile
-router.get('/profile', authMiddleware, async (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
   try {
     const [users] = await db.query('SELECT id, name, email, status, oauth_provider, created_at FROM users WHERE id = ?', [req.user.id]);
     if (users.length === 0) {
