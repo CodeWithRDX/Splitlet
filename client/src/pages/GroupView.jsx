@@ -519,7 +519,7 @@ export default function GroupView() {
       {/* Main Content Layout */}
       <div className="expense-layout">
         {/* Left Side: Expenses & Settlements Feed */}
-        <div className="glass-panel">
+        <div className="glass-panel" style={{ alignSelf: 'start' }}>
           <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>Transactions Feed</h3>
 
           {group?.expenses.length === 0 && group?.settlements.length === 0 ? (
