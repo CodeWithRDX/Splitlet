@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /login
+Allow: /claim
+Allow: /forgot-password
+Disallow: /dashboard
+Disallow: /group/
+Disallow: /api/
+
+Sitemap: https://splitlet.raushan.live/sitemap.xml
