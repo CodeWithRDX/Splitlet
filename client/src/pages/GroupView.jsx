@@ -18,6 +18,10 @@ export default function GroupView() {
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Group rename state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [tempGroupName, setTempGroupName] = useState('');
 
   // Modals visibility
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -439,6 +443,23 @@ export default function GroupView() {
     }
   };
 
+  // Rename Group
+  const handleRenameGroup = async (e) => {
+    e.preventDefault();
+    if (!tempGroupName.trim()) return;
+
+    try {
+      await apiFetch(`/api/groups/${groupId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: tempGroupName })
+      });
+      setGroup(prev => ({ ...prev, name: tempGroupName.trim() }));
+      setIsRenaming(false);
+    } catch (err) {
+      alert(err.message || 'Failed to rename group');
+    }
+  };
+
   // Send Chat Message
   const handleSendChatMessage = (e) => {
     e.preventDefault();
@@ -495,9 +516,43 @@ export default function GroupView() {
 
       {/* Group Title Panel */}
       <div className="glass-panel group-title-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h2 style={{ fontSize: '24px', fontWeight: 700 }}>{group?.name}</h2>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+        <div style={{ flexGrow: 1, marginRight: '24px' }}>
+          {isRenaming ? (
+            <form onSubmit={handleRenameGroup} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '400px' }}>
+              <input
+                type="text"
+                className="form-input"
+                value={tempGroupName}
+                onChange={(e) => setTempGroupName(e.target.value)}
+                style={{ fontSize: '20px', fontWeight: 600, padding: '4px 8px' }}
+                required
+                autoFocus
+              />
+              <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }}>
+                Save
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsRenaming(false)}
+                style={{ padding: '6px 12px', fontSize: '13px' }}
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 700 }}>{group?.name}</h2>
+              <button 
+                onClick={() => { setTempGroupName(group?.name || ''); setIsRenaming(true); }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
+                title="Rename Group"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px' }}>
             Group Ledger · Created {new Date(group?.createdAt).toLocaleDateString()}
           </span>
         </div>

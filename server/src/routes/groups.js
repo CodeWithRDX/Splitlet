@@ -127,6 +127,39 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Rename a group
+router.put('/:id', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Group name is required' });
+  }
+
+  try {
+    // Verify user belongs to the group
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    // Update group name
+    await db.query(
+      'UPDATE `groups` SET name = ? WHERE id = ?',
+      [name.trim(), groupId]
+    );
+
+    res.json({ message: 'Group renamed successfully', name: name.trim() });
+  } catch (error) {
+    console.error('Error renaming group:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 3. Get group details (includes members, expenses, and balances)
 router.get('/:id', async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
