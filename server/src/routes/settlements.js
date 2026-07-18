@@ -73,29 +73,31 @@ router.post('/', async (req, res) => {
 
     await connection.commit();
 
-    // Trigger emails (non-blocking)
-    const formattedAmount = `$${(amountCents / 100).toFixed(2)}`;
+    // Trigger emails (non-blocking) only if requested
+    if (req.body.sendNotification !== false) {
+      const formattedAmount = `$${(amountCents / 100).toFixed(2)}`;
 
-    // Payer confirmation
-    if (payerEmail) {
-      sendAndLogEmail(
-        payerId,
-        'debt_settled',
-        payerEmail,
-        `Payment to ${receiverName} recorded`,
-        `Hi ${payerName},\n\nYour payment of ${formattedAmount} to ${receiverName} in group "${groupName}" has been successfully recorded.\n\nView details: ${CLIENT_URL}`
-      ).catch(e => console.error(e));
-    }
+      // Payer confirmation
+      if (payerEmail) {
+        sendAndLogEmail(
+          payerId,
+          'debt_settled',
+          payerEmail,
+          `Payment to ${receiverName} recorded`,
+          `Hi ${payerName},\n\nYour payment of ${formattedAmount} to ${receiverName} in group "${groupName}" has been successfully recorded.\n\nView details: ${CLIENT_URL}`
+        ).catch(e => console.error(e));
+      }
 
-    // Receiver notification
-    if (receiverEmail) {
-      sendAndLogEmail(
-        receiverId,
-        'debt_settled',
-        receiverEmail,
-        `Payment from ${payerName} received`,
-        `Hi ${receiverName},\n\n${payerName} has recorded a payment of ${formattedAmount} to you in group "${groupName}".\n\nYour balance has been updated.\n\nView details: ${CLIENT_URL}`
-      ).catch(e => console.error(e));
+      // Receiver notification
+      if (receiverEmail) {
+        sendAndLogEmail(
+          receiverId,
+          'debt_settled',
+          receiverEmail,
+          `Payment from ${payerName} received`,
+          `Hi ${receiverName},\n\n${payerName} has recorded a payment of ${formattedAmount} to you in group "${groupName}".\n\nYour balance has been updated.\n\nView details: ${CLIENT_URL}`
+        ).catch(e => console.error(e));
+      }
     }
 
     res.status(201).json({ 

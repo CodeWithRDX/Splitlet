@@ -32,6 +32,22 @@ if (useSMTP) {
  * @param {string} text - Email body content.
  */
 async function sendAndLogEmail(userId, type, recipientEmail, subject, text) {
+  // Check user preference
+  if (userId) {
+    try {
+      const [users] = await db.query(
+        'SELECT email_notifications_enabled FROM users WHERE id = ?',
+        [userId]
+      );
+      if (users.length > 0 && users[0].email_notifications_enabled === 0) {
+        console.log(`Skipping email notification: user ID ${userId} has disabled emails.`);
+        return; // User has explicitly opted out of notifications
+      }
+    } catch (prefErr) {
+      console.error('Error checking user email preference, continuing:', prefErr);
+    }
+  }
+
   // 1. Create a log in the database as 'pending'
   let logId = null;
   try {

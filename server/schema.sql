@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   currency VARCHAR(10) DEFAULT 'INR',
   currency_symbol VARCHAR(10) DEFAULT '₹',
   locale VARCHAR(20) DEFAULT 'en-IN',
+  email_notifications_enabled TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

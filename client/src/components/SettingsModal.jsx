@@ -28,6 +28,7 @@ export default function SettingsModal({ isOpen, onClose, onUpdateSuccess }) {
   const { prefUser, updateSettings } = useCurrency();
   const [country, setCountry] = useState(prefUser?.country || 'India');
   const [currency, setCurrency] = useState(prefUser?.currency || 'INR');
+  const [emailNotifications, setEmailNotifications] = useState(prefUser?.emailNotificationsEnabled !== false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -37,6 +38,7 @@ export default function SettingsModal({ isOpen, onClose, onUpdateSuccess }) {
     if (isOpen && prefUser) {
       setCountry(prefUser.country || 'India');
       setCurrency(prefUser.currency || 'INR');
+      setEmailNotifications(prefUser.emailNotificationsEnabled !== false);
       setError('');
       setSuccess('');
     }
@@ -57,7 +59,8 @@ export default function SettingsModal({ isOpen, onClose, onUpdateSuccess }) {
         country,
         currency,
         currencySymbol: details.symbol,
-        locale: details.locale
+        locale: details.locale,
+        emailNotificationsEnabled: emailNotifications
       });
       setSuccess('Settings updated successfully.');
       if (onUpdateSuccess) {
@@ -116,6 +119,19 @@ export default function SettingsModal({ isOpen, onClose, onUpdateSuccess }) {
                 <option key={cur} value={cur}>{cur} ({currencyDetails[cur].symbol})</option>
               ))}
             </select>
+          </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              id="settingsEmailNotifications"
+              checked={emailNotifications}
+              onChange={(e) => setEmailNotifications(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <label htmlFor="settingsEmailNotifications" style={{ fontSize: '13px', color: 'white', cursor: 'pointer', userSelect: 'none' }}>
+              Receive email updates (invites, bills, payments)
+            </label>
           </div>
 
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '28px' }}>

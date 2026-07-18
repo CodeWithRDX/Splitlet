@@ -46,7 +46,9 @@ export default function GroupView() {
   const [settleAmount, setSettleAmount] = useState('');
 
   // Add Member Form
+  const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [sendNotification, setSendNotification] = useState(true);
 
   // Currency & Settings State
   const { prefUser, formatInrCents, formatCurrency } = useCurrency();
@@ -338,7 +340,8 @@ export default function GroupView() {
       splitType,
       payerId: parseInt(expensePayer, 10),
       splits: splitsPayload,
-      currencyCode: activeUser?.currency || 'INR'
+      currencyCode: activeUser?.currency || 'INR',
+      sendNotification
     };
 
     try {
@@ -397,7 +400,8 @@ export default function GroupView() {
           payerId: parseInt(settlePayer, 10),
           receiverId: parseInt(settleReceiver, 10),
           amountCents: amtCents,
-          currencyCode: activeUser?.currency || 'INR'
+          currencyCode: activeUser?.currency || 'INR',
+          sendNotification
         })
       });
 
@@ -417,10 +421,16 @@ export default function GroupView() {
     try {
       await apiFetch(`/api/groups/${groupId}/members`, {
         method: 'POST',
-        body: JSON.stringify({ email: newMemberEmail })
+        body: JSON.stringify({ 
+          name: newMemberName,
+          email: newMemberEmail,
+          sendNotification
+        })
       });
 
+      setNewMemberName('');
       setNewMemberEmail('');
+      setSendNotification(true);
       setShowMemberModal(false);
       fetchGroupDetails();
     } catch (err) {
@@ -457,6 +467,22 @@ export default function GroupView() {
       setIsRenaming(false);
     } catch (err) {
       alert(err.message || 'Failed to rename group');
+    }
+  };
+
+  // Delete Group
+  const handleDeleteGroup = async () => {
+    if (!window.confirm(`Are you sure you want to delete the group "${group?.name}"? This action is permanent and will delete all expenses, settlements, and chat messages.`)) {
+      return;
+    }
+
+    try {
+      await apiFetch(`/api/groups/${groupId}`, {
+        method: 'DELETE'
+      });
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Failed to delete group');
     }
   };
 
@@ -565,6 +591,9 @@ export default function GroupView() {
           </button>
           <button className="btn btn-primary" onClick={() => setShowSettleModal(true)}>
             Settle Up
+          </button>
+          <button className="btn btn-danger" onClick={handleDeleteGroup}>
+            Delete Group
           </button>
         </div>
       </div>
@@ -956,6 +985,18 @@ export default function GroupView() {
                 })}
               </div>
 
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+                <input
+                  type="checkbox"
+                  id="expenseSendNotification"
+                  checked={sendNotification}
+                  onChange={(e) => setSendNotification(e.target.checked)}
+                />
+                <label htmlFor="expenseSendNotification" style={{ fontSize: '13px', cursor: 'pointer' }}>
+                  Notify group members via email
+                </label>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowExpenseModal(false)}>
                   Cancel
@@ -1021,6 +1062,18 @@ export default function GroupView() {
                 />
               </div>
 
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+                <input
+                  type="checkbox"
+                  id="settleSendNotification"
+                  checked={sendNotification}
+                  onChange={(e) => setSendNotification(e.target.checked)}
+                />
+                <label htmlFor="settleSendNotification" style={{ fontSize: '13px', cursor: 'pointer' }}>
+                  Notify members via email
+                </label>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '28px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowSettleModal(false); setError(''); }}>
                   Cancel
@@ -1043,19 +1096,49 @@ export default function GroupView() {
 
             <form onSubmit={handleAddMember}>
               <div className="form-group">
-                <label className="form-label">Member's Email Address</label>
+                <label className="form-label">Member's Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. John Doe"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email Address (Optional)</label>
                 <input
                   type="email"
                   className="form-input"
-                  placeholder="e.g. peer@test.com"
+                  placeholder="e.g. peer@test.com (optional)"
                   value={newMemberEmail}
-                  onChange={(e) => setNewMemberEmail(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setNewMemberEmail(e.target.value);
+                    if (!e.target.value) {
+                      setSendNotification(false);
+                    }
+                  }}
                 />
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginTop: '6px' }}>
-                  The user must already have a registered account in Splitlet to be added.
+                  If provided, they will receive an email. If omitted, they will be created as a placeholder member immediately.
                 </span>
               </div>
+
+              {newMemberEmail && (
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+                  <input
+                    type="checkbox"
+                    id="sendNotification"
+                    checked={sendNotification}
+                    onChange={(e) => setSendNotification(e.target.checked)}
+                  />
+                  <label htmlFor="sendNotification" style={{ fontSize: '14px', cursor: 'pointer' }}>
+                    Send email notification/invitation link
+                  </label>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '28px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowMemberModal(false); setError(''); }}>

@@ -59,17 +59,17 @@ export default function Dashboard({ user, onLogout }) {
     e.preventDefault();
     setError('');
 
-    const emailsArray = inviteEmails
+    const membersArray = inviteEmails
       .split(',')
-      .map(email => email.trim())
-      .filter(email => email.length > 0);
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
 
     try {
       await apiFetch('/api/groups', {
         method: 'POST',
         body: JSON.stringify({
           name: newGroupName,
-          emails: emailsArray
+          members: membersArray
         })
       });
 
@@ -311,16 +311,16 @@ export default function Dashboard({ user, onLogout }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Invite Members (emails, comma-separated)</label>
+                <label className="form-label">Add/Invite Members (names or emails, comma-separated)</label>
                 <textarea
                   className="form-input"
-                  placeholder="e.g., alice@test.com, bob@test.com"
+                  placeholder="e.g. John Doe, alice@test.com, Bob Smith"
                   style={{ minHeight: '80px', resize: 'vertical' }}
                   value={inviteEmails}
                   onChange={(e) => setInviteEmails(e.target.value)}
                 />
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginTop: '6px' }}>
-                  Invited users must already have registered accounts to be added.
+                  Enter names or emails. Registered emails will be linked; names without emails will create placeholder members.
                 </span>
               </div>
 

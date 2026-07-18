@@ -100,19 +100,21 @@ router.post('/', async (req, res) => {
 
     await connection.commit();
 
-    // Trigger email notifications (non-blocking, async background calls)
-    notificationReceivers.forEach(receiver => {
-      const formattedTotal = `$${(amountCents / 100).toFixed(2)}`;
-      const formattedShare = `$${(receiver.owedCents / 100).toFixed(2)}`;
-      
-      sendAndLogEmail(
-        receiver.userId,
-        'new_expense',
-        receiver.email,
-        `New expense added: "${description}"`,
-        `Hi ${receiver.name},\n\nA new expense of ${formattedTotal} ("${description}") was added in group "${groupName}" by ${payerName}.\n\nYour split share is ${formattedShare}.\n\nView details: ${CLIENT_URL}`
-      ).catch(err => console.error('Email trigger error:', err));
-    });
+    // Trigger email notifications (non-blocking, async background calls) only if requested
+    if (req.body.sendNotification !== false) {
+      notificationReceivers.forEach(receiver => {
+        const formattedTotal = `$${(amountCents / 100).toFixed(2)}`;
+        const formattedShare = `$${(receiver.owedCents / 100).toFixed(2)}`;
+        
+        sendAndLogEmail(
+          receiver.userId,
+          'new_expense',
+          receiver.email,
+          `New expense added: "${description}"`,
+          `Hi ${receiver.name},\n\nA new expense of ${formattedTotal} ("${description}") was added in group "${groupName}" by ${payerName}.\n\nYour split share is ${formattedShare}.\n\nView details: ${CLIENT_URL}`
+        ).catch(err => console.error('Email trigger error:', err));
+      });
+    }
 
     res.status(201).json({ message: 'Expense created successfully', expenseId });
   } catch (error) {

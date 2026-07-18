@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 
 // 2. Create a new group
 router.post('/', async (req, res) => {
-  const { name, emails } = req.body;
+  const { name, emails, members } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Group name is required' });
@@ -55,50 +55,93 @@ router.post('/', async (req, res) => {
     );
 
     // Process other invited members
-    if (emails && Array.isArray(emails) && emails.length > 0) {
-      for (const email of emails) {
-        const trimmedEmail = email.trim();
-        if (!trimmedEmail || trimmedEmail === req.user.email) continue;
+    let finalMembersList = [];
 
-        // Check if user exists
-        const [users] = await connection.query('SELECT id, status FROM users WHERE email = ?', [trimmedEmail]);
-        let memberId;
+    // Legacy emails array support
+    if (emails && Array.isArray(emails)) {
+      emails.forEach(e => {
+        if (e && e.trim()) {
+          finalMembersList.push({ name: '', email: e.trim() });
+        }
+      });
+    }
 
-        if (users.length > 0) {
-          memberId = users[0].id;
-          // Add to group
-          await connection.query(
-            'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
-            [groupId, memberId]
-          );
+    // New members array support
+    if (members && Array.isArray(members)) {
+      members.forEach(m => {
+        if (typeof m === 'string') {
+          if (m.includes('@')) {
+            finalMembersList.push({ name: '', email: m.trim() });
+          } else {
+            finalMembersList.push({ name: m.trim(), email: '' });
+          }
+        } else if (m && typeof m === 'object') {
+          finalMembersList.push({ name: m.name ? m.name.trim() : '', email: m.email ? m.email.trim() : '' });
+        }
+      });
+    }
 
-          // Trigger email notification for existing user (non-blocking)
-          sendAndLogEmail(
-            memberId,
-            'group_added',
-            trimmedEmail,
-            `You have been added to a new group: ${name}`,
-            `Hi! You have been added to the group "${name}" on Splitlet by ${req.user.name}.\n\nAccess your dashboard at: ${CLIENT_URL}`
-          ).catch(e => console.error(e));
+    for (const memberItem of finalMembersList) {
+      let mName = memberItem.name;
+      let mEmail = memberItem.email.toLowerCase();
+      let isDummy = false;
 
-        } else {
-          // Create placeholder pending user
-          const defaultName = trimmedEmail.split('@')[0];
-          const [placeholderResult] = await connection.query(
-            "INSERT INTO users (name, email, password_hash, status) VALUES (?, ?, NULL, 'pending')",
-            [defaultName, trimmedEmail]
-          );
-          memberId = placeholderResult.insertId;
+      if (!mName && !mEmail) continue;
 
-          // Add to group
-          await connection.query(
-            'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
-            [groupId, memberId]
-          );
+      if (!mEmail) {
+        const sanitized = mName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        mEmail = `${sanitized}_${Date.now()}_${Math.floor(Math.random() * 1000)}@placeholder.splitlet.com`;
+        isDummy = true;
+      }
 
+      if (!mName) {
+        mName = mEmail.split('@')[0];
+      }
+
+      if (mEmail === req.user.email.toLowerCase()) continue;
+
+      // Check if user exists
+      let users = [];
+      if (!isDummy) {
+        [users] = await connection.query('SELECT id, status FROM users WHERE email = ?', [mEmail]);
+      }
+
+      let memberId;
+      if (users.length > 0) {
+        memberId = users[0].id;
+        // Add to group
+        await connection.query(
+          'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+          [groupId, memberId]
+        );
+
+        // Trigger email notification for existing user (non-blocking)
+        sendAndLogEmail(
+          memberId,
+          'group_added',
+          mEmail,
+          `You have been added to a new group: ${name}`,
+          `Hi! You have been added to the group "${name}" on Splitlet by ${req.user.name}.\n\nAccess your dashboard at: ${CLIENT_URL}`
+        ).catch(e => console.error(e));
+
+      } else {
+        // Create placeholder pending user
+        const [placeholderResult] = await connection.query(
+          "INSERT INTO users (name, email, password_hash, status) VALUES (?, ?, NULL, 'pending')",
+          [mName, mEmail]
+        );
+        memberId = placeholderResult.insertId;
+
+        // Add to group
+        await connection.query(
+          'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+          [groupId, memberId]
+        );
+
+        if (!isDummy) {
           // Generate secure JWT invitation token
           const inviteToken = jwt.sign(
-            { userId: memberId, email: trimmedEmail, groupId },
+            { userId: memberId, email: mEmail, groupId },
             JWT_SECRET,
             { expiresIn: '7d' }
           );
@@ -108,7 +151,7 @@ router.post('/', async (req, res) => {
           sendAndLogEmail(
             memberId,
             'group_invite',
-            trimmedEmail,
+            mEmail,
             `Invitation to join Splitlet group: ${name}`,
             `Hello!\n\nYou have been added to the group "${name}" on Splitlet by ${req.user.name}.\n\nSince you don't have an account yet, click the link below to set up your password and access your historical ledger:\n\n${inviteLink}\n\nWelcome to Splitlet!`
           ).catch(e => console.error(e));
@@ -156,6 +199,31 @@ router.put('/:id', async (req, res) => {
     res.json({ message: 'Group renamed successfully', name: name.trim() });
   } catch (error) {
     console.error('Error renaming group:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete a group
+router.delete('/:id', async (req, res) => {
+  const groupId = parseInt(req.params.id, 10);
+
+  try {
+    // Verify user belongs to the group
+    const [membership] = await db.query(
+      'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, req.user.id]
+    );
+
+    if (membership.length === 0) {
+      return res.status(403).json({ error: 'Access denied: not a group member' });
+    }
+
+    // Delete the group
+    await db.query('DELETE FROM `groups` WHERE id = ?', [groupId]);
+
+    res.json({ message: 'Group deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting group:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -257,13 +325,26 @@ router.get('/:id', async (req, res) => {
 // 4. Add a member to a group (invites placeholders if they don't exist)
 router.post('/:id/members', async (req, res) => {
   const groupId = parseInt(req.params.id, 10);
-  const { email } = req.body;
+  const { name, email, sendNotification } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: 'Member email is required' });
+  if (!name && !email) {
+    return res.status(400).json({ error: 'Name or email is required' });
   }
 
-  const trimmedEmail = email.trim().toLowerCase();
+  let finalName = name ? name.trim() : '';
+  let trimmedEmail = email ? email.trim().toLowerCase() : '';
+  let isDummyEmail = false;
+
+  if (!trimmedEmail) {
+    // Generate a unique dummy email for name-only user
+    const sanitizedName = finalName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    trimmedEmail = `${sanitizedName}_${Date.now()}_${Math.floor(Math.random() * 1000)}@placeholder.splitlet.com`;
+    isDummyEmail = true;
+  }
+
+  if (!finalName) {
+    finalName = trimmedEmail.split('@')[0];
+  }
 
   try {
     // Verify current user is in group
@@ -279,8 +360,11 @@ router.post('/:id/members', async (req, res) => {
     const [groupData] = await db.query('SELECT name FROM `groups` WHERE id = ?', [groupId]);
     const groupName = groupData[0].name;
 
-    // Check if user exists
-    const [users] = await db.query('SELECT id, name, status FROM users WHERE email = ?', [trimmedEmail]);
+    // Check if user exists (only query if not dummy)
+    let users = [];
+    if (!isDummyEmail) {
+      [users] = await db.query('SELECT id, name, status FROM users WHERE email = ?', [trimmedEmail]);
+    }
     
     let targetUserId;
     let isNewUser = false;
@@ -303,23 +387,24 @@ router.post('/:id/members', async (req, res) => {
         [groupId, targetUserId]
       );
 
-      // Trigger standard email notification
-      sendAndLogEmail(
-        targetUserId,
-        'group_added',
-        trimmedEmail,
-        `You have been added to: ${groupName}`,
-        `Hi ${users[0].name},\n\nYou have been added to the group "${groupName}" on Splitlet by ${req.user.name}.\n\nAccess your dashboard at: ${CLIENT_URL}`
-      ).catch(e => console.error(e));
+      // Trigger standard email notification only if requested
+      if (sendNotification !== false) {
+        sendAndLogEmail(
+          targetUserId,
+          'group_added',
+          trimmedEmail,
+          `You have been added to: ${groupName}`,
+          `Hi ${users[0].name},\n\nYou have been added to the group "${groupName}" on Splitlet by ${req.user.name}.\n\nAccess your dashboard at: ${CLIENT_URL}`
+        ).catch(e => console.error(e));
+      }
 
     } else {
       isNewUser = true;
-      const defaultName = trimmedEmail.split('@')[0];
 
       // Create placeholder account
       const [placeholderResult] = await db.query(
         "INSERT INTO users (name, email, password_hash, status) VALUES (?, ?, NULL, 'pending')",
-        [defaultName, trimmedEmail]
+        [finalName, trimmedEmail]
       );
       targetUserId = placeholderResult.insertId;
 
@@ -329,27 +414,29 @@ router.post('/:id/members', async (req, res) => {
         [groupId, targetUserId]
       );
 
-      // Generate signed JWT invitation token
-      const inviteToken = jwt.sign(
-        { userId: targetUserId, email: trimmedEmail, groupId },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-      const inviteLink = `${CLIENT_URL}/claim?token=${inviteToken}`;
+      // Trigger invitation email only if requested and it's a real email
+      if (sendNotification !== false && !isDummyEmail) {
+        // Generate signed JWT invitation token
+        const inviteToken = jwt.sign(
+          { userId: targetUserId, email: trimmedEmail, groupId },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        const inviteLink = `${CLIENT_URL}/claim?token=${inviteToken}`;
 
-      // Trigger invitation email
-      sendAndLogEmail(
-        targetUserId,
-        'group_invite',
-        trimmedEmail,
-        `Invitation to join Splitlet group: ${groupName}`,
-        `Hello!\n\nYou have been added to the group "${groupName}" on Splitlet by ${req.user.name}.\n\nSince you do not have an account yet, click the link below to set up your password and access your historical ledger:\n\n${inviteLink}\n\nWelcome to Splitlet!`
-      ).catch(e => console.error(e));
+        sendAndLogEmail(
+          targetUserId,
+          'group_invite',
+          trimmedEmail,
+          `Invitation to join Splitlet group: ${groupName}`,
+          `Hello!\n\nYou have been added to the group "${groupName}" on Splitlet by ${req.user.name}.\n\nSince you do not have an account yet, click the link below to set up your password and access your historical ledger:\n\n${inviteLink}\n\nWelcome to Splitlet!`
+        ).catch(e => console.error(e));
+      }
     }
 
     res.status(200).json({ 
       message: 'Member added successfully', 
-      member: { id: targetUserId, email: trimmedEmail, status: isNewUser ? 'pending' : 'active' } 
+      member: { id: targetUserId, name: finalName, email: trimmedEmail, status: isNewUser ? 'pending' : 'active' } 
     });
   } catch (error) {
     console.error('Error adding group member:', error);

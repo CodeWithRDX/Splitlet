@@ -421,7 +421,7 @@ router.get('/oauth/google/callback', async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const [users] = await db.query(
-      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, created_at 
+      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, email_notifications_enabled AS emailNotificationsEnabled, created_at 
        FROM users 
        WHERE id = ?`, 
       [req.user.id]
@@ -438,23 +438,25 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 // Update user settings/preferences
 router.put('/settings', authMiddleware, async (req, res) => {
-  const { country, currency, currencySymbol, locale } = req.body;
+  const { country, currency, currencySymbol, locale, emailNotificationsEnabled } = req.body;
 
   if (!currency || !locale) {
     return res.status(400).json({ error: 'Currency and locale are required.' });
   }
 
+  const emailNotificationsVal = emailNotificationsEnabled === false ? 0 : 1;
+
   try {
     await db.query(
       `UPDATE users 
-       SET country = ?, currency = ?, currency_symbol = ?, locale = ? 
+       SET country = ?, currency = ?, currency_symbol = ?, locale = ?, email_notifications_enabled = ? 
        WHERE id = ?`,
-      [country || null, currency, currencySymbol || '₹', locale, req.user.id]
+      [country || null, currency, currencySymbol || '₹', locale, emailNotificationsVal, req.user.id]
     );
 
     // Fetch updated user info
     const [users] = await db.query(
-      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, created_at 
+      `SELECT id, name, email, status, oauth_provider, country, currency, currency_symbol AS currencySymbol, locale, email_notifications_enabled AS emailNotificationsEnabled, created_at 
        FROM users 
        WHERE id = ?`,
       [req.user.id]
