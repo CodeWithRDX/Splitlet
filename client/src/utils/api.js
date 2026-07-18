@@ -46,12 +46,21 @@ export const apiFetch = async (endpoint, options = {}) => {
     headers
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, config);
+  let response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, config);
+  } catch (netErr) {
+    const err = new Error('Network connection error');
+    err.status = 503;
+    throw err;
+  }
   
   const data = await response.json().catch(() => ({}));
   
   if (!response.ok) {
-    throw new Error(data.error || 'Something went wrong');
+    const err = new Error(data.error || 'Something went wrong');
+    err.status = response.status;
+    throw err;
   }
 
   return data;

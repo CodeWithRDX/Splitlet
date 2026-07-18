@@ -31,9 +31,14 @@ export default function App() {
           setUser(data.user);
         })
         .catch(err => {
-          console.error('Session expired:', err);
-          logout();
-          setCurrentUser(null);
+          console.error('Session verification error:', err);
+          // Only clear session and log out if it is an authentication failure
+          if (err.status === 401 || err.status === 403) {
+            logout();
+            setCurrentUser(null);
+          } else {
+            console.warn('Backend is down or returned a server-side error. Retaining session details.');
+          }
         })
         .finally(() => {
           setLoading(false);
